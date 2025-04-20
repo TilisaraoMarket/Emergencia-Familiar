@@ -179,6 +179,11 @@
         <p class="asterisk-note text-xs text-red-200 mt-2">
             * Se abrirán nuevas pestañas de WhatsApp Web para cada familiar registrado. Debes confirmar el envío manualmente.
         </p>
+                <!-- Agregar después del párrafo con clase "asterisk-note" y antes del cierre del div.emergency-section -->
+        <p class="text-xs text-gray-400 mt-4 text-center italic">
+            Creado por Esteban Federico Mansilla<br>
+            <span class="font-semibold">CEO de Tilisarao Market</span>
+        </p>
     </div>
 </div>
 <script>
@@ -203,6 +208,66 @@
         } catch (e) {
             emergencyContacts = [];
         }
+    }
+
+    // Reemplazar la función getCurrentLocation actual con esta versión mejorada:
+    function getCurrentLocation() {
+        return new Promise((resolve, reject) => {
+            if (!navigator.geolocation) {
+                reject('Tu navegador no soporta geolocalización');
+                return;
+            }
+
+            const options = {
+                enableHighAccuracy: true,  // Alta precisión
+                timeout: 10000,           // 10 segundos máximo
+                maximumAge: 0             // No usar cache
+            };
+
+            // Mostrar indicador de carga
+            const sendButton = document.getElementById('sendWhatsAppBtn');
+            const originalText = sendButton.innerHTML;
+            sendButton.innerHTML = '📍 Obteniendo ubicación...';
+            sendButton.disabled = true;
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const latitude = position.coords.latitude;
+                    const longitude = position.coords.longitude;
+                    const accuracy = Math.round(position.coords.accuracy);
+                    const googleMapsLink = `https://www.google.com/maps?q=${latitude},${longitude}`;
+                    
+                    // Restaurar botón
+                    sendButton.innerHTML = originalText;
+                    sendButton.disabled = false;
+                    
+                    resolve(googleMapsLink);
+                },
+                (error) => {
+                    // Restaurar botón
+                    sendButton.innerHTML = originalText;
+                    sendButton.disabled = false;
+
+                    // Manejar errores específicos
+                    let errorMessage = '';
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            errorMessage = 'No has dado permiso para acceder a tu ubicación';
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            errorMessage = 'La ubicación no está disponible en este momento';
+                            break;
+                        case error.TIMEOUT:
+                            errorMessage = 'Se agotó el tiempo de espera al obtener la ubicación';
+                            break;
+                        default:
+                            errorMessage = 'Error desconocido al obtener la ubicación';
+                    }
+                    reject(errorMessage);
+                },
+                options
+            );
+        });
     }
 
     // --- Exportar contactos a JSON ---
@@ -285,18 +350,36 @@
         renderContacts();
     };
 
-    document.getElementById('sendWhatsAppBtn').onclick = function() {
+    // Modificar también la función del botón de envío para mejorar el manejo de errores:
+    document.getElementById('sendWhatsAppBtn').onclick = async function() {
         if (emergencyContacts.length === 0) {
             alert('Agrega al menos un contacto familiar.');
             return;
         }
-        const message = document.getElementById('emergencyMessage').value;
-        emergencyContacts.forEach(contact => {
-            const url = `https://wa.me/${contact.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`;
-            window.open(url, '_blank');
-        });
-    };
 
+        try {
+            const locationLink = await getCurrentLocation();
+            const baseMessage = document.getElementById('emergencyMessage').value;
+            const messageWithLocation = `${baseMessage}\n\nMi ubicación actual:\n${locationLink}`;
+
+            let sentCount = 0;
+            emergencyContacts.forEach(contact => {
+                try {
+                    const url = `https://wa.me/${contact.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(messageWithLocation)}`;
+                    window.open(url, '_blank');
+                    sentCount++;
+                } catch (e) {
+                    console.error(`Error al enviar mensaje a ${contact.name}:`, e);
+                }
+            });
+
+            if (sentCount > 0) {
+                alert(`Mensaje enviado a ${sentCount} contacto(s)`);
+            }
+        } catch (error) {
+            alert(`Error: ${error}`);
+        }
+    };
     document.getElementById('exportBtn').onclick = exportContacts;
 
     document.getElementById('importFile').addEventListener('change', function(e) {
